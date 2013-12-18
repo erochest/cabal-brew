@@ -2,7 +2,6 @@
 {-# LANGUAGE RecordWildCards   #-}
 
 
--- TODO: Break into its own project.
 -- TODO: Lookup version on install.
 -- TODO: Use an `InstalledProject` data type.
 -- TODO: Use `EitherT String Sh` more consistently.
