@@ -1,19 +1,27 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
 
 
 module Main where
 
 
 import           Control.Error
-import           Control.Monad
+import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Class
+import           Control.Monad.Writer.Strict
 import qualified Data.ByteString                       as BS
 import qualified Data.ByteString.Lazy                  as LBS
 import           Data.Conduit
+import qualified Data.DList                            as D
+import           Data.Functor
 import           Data.Maybe
 import           Data.Text                             (Text)
 import qualified Data.Text                             as T
 import qualified Data.Text.Encoding                    as TE
+import           Data.Traversable
 import           Data.Version
 import           Distribution.Package                  hiding (PackageName)
 import           Distribution.PackageDescription
@@ -28,6 +36,8 @@ import           Shelly
 import           Text.ParserCombinators.ReadP
 
 
+data Hole = Hole
+
 type PackageName    = Text
 type PackageVersion = Text
 
@@ -38,11 +48,43 @@ data CabalBrew = Install { packageName    :: PackageName
                          }
                 deriving (Show)
 
+newtype CabalBrewRun a = CBR { runCBR :: EitherT String (WriterT (D.DList Text) Sh) a }
+                       deriving (Monad, Applicative, Functor)
+
+instance MonadIO CabalBrewRun where
+    liftIO = liftSh . Shelly.liftIO
+
+runCabalBrew :: (Functor m, MonadIO m) => CabalBrewRun a -> m (Either String a, [Text])
+runCabalBrew = fmap (fmap D.toList) . shelly . verbosely . runWriterT . runEitherT . runCBR
+
+execCabalBrew :: (Functor m, MonadIO m) => CabalBrewRun a -> m (Either String a)
+execCabalBrew = fmap fst . runCabalBrew
+
+logCabalBrew :: (Functor m, MonadIO m) => CabalBrewRun a -> m (Either String [Text])
+logCabalBrew m = do
+    (out, log) <- runCabalBrew m
+    return $ log <$ out
+
+log :: Text -> CabalBrewRun ()
+log = liftW . tell . D.singleton
+
+logAll :: [Text] -> CabalBrewRun ()
+logAll = liftW . tell . D.fromList
+
+liftSh :: Sh a -> CabalBrewRun a
+liftSh = CBR . lift . lift
+
+liftW :: WriterT (D.DList Text) Sh a -> CabalBrewRun a
+liftW = CBR . lift
+
+liftET :: EitherT String (WriterT (D.DList Text) Sh) a -> CabalBrewRun a
+liftET = CBR
+
 cellar :: FilePath
 cellar = FS.concat ["/usr", "local", "Cellar"]
 
-cabalBrew :: CabalBrew -> Sh ()
-cabalBrew Install{..} = do
+cabalBrew :: CabalBrew -> CabalBrewRun ()
+cabalBrew Install{..} = liftSh $ do
     whenM (test_d sandbox) $ do
         echo $ "Cleaning out old keg for " <> keg
         brew_ "unlink" [keg]
@@ -63,12 +105,12 @@ cabalBrew (Update []) = do
     packages <-  map (T.drop 6)
              .   filter (T.isPrefixOf "cabal-")
              .   map (toTextIgnore . FS.filename)
-             <$> ls cellar
+             <$> liftSh (ls cellar)
     case packages of
-        [] -> echo "Nothing to update."
+        [] -> liftSh $ echo "Nothing to update."
         ps -> cabalBrew (Update ps)
 cabalBrew Update{..} =
-    mapM_ update =<< filterM hasPackage (filter (/= "install") packageNames)
+    mapM_ update =<< filterM (liftSh . hasPackage) (filter (/= "install") packageNames)
 
 hasPackage :: PackageName -> Sh Bool
 hasPackage = test_d . getPackageDirectory
@@ -76,50 +118,49 @@ hasPackage = test_d . getPackageDirectory
 getPackageDirectory :: PackageName -> FilePath
 getPackageDirectory = FS.append cellar . fromText . T.append "cabal-"
 
-update :: PackageName -> Sh ()
-update packageName = eitherError =<< runEitherT (do
-    v0 <-  EitherT $ note "Invalid or missing current package."
-       <$> getCurrentVersion packageName
-    v1 <- EitherT $ getHackageVersion packageName
+update :: PackageName -> CabalBrewRun ()
+update packageName = do
+    v0 <- getCurrentVersion packageName
+    v1 <- getHackageVersion packageName
     when (v0 < v1) $ do
         let v1' = showv v1
         echo' $ ">>> Updating " <> packageName <> ": " <> showv v0 <> " => " <> v1'
-        lift . cabalBrew $ Install packageName v1'
-        echo' "")
+        cabalBrew $ Install packageName v1'
+        echo' ""
     where showv = T.pack . showVersion
-          lift  = EitherT . fmap Right
-          echo' = lift . echo
+          echo' = liftSh . echo
 
 eitherError :: Either String a -> Sh a
 eitherError (Right a)  = return a
 eitherError (Left msg) = errorExit $ T.pack msg
 
-getCurrentVersion :: PackageName -> Sh (Maybe Version)
-getCurrentVersion name =
-        join . fmap (readVersion . FS.encodeString . FS.filename) . listToMaybe
-    <$> ls (getPackageDirectory name)
+getCurrentVersion :: PackageName -> CabalBrewRun Version
+getCurrentVersion =
+        maybeErr . join . fmap (readVersion . FS.encodeString . FS.filename) . listToMaybe
+    <=< liftSh . ls . getPackageDirectory
+    where maybeErr = liftET . hoistEither . note "Invalid package version."
 
 readVersion :: String -> Maybe Version
 readVersion = listToMaybe . map fst . filter (null . snd) . readP_to_S parseVersion
 
-getHackageVersion :: PackageName -> Sh (Either String Version)
+getHackageVersion :: PackageName -> CabalBrewRun Version
 getHackageVersion name =
-    liftIO $ fmap (pkgVersion . package . packageDescription) <$> getCabal name
+    pkgVersion . package . packageDescription <$> getCabal name
 
 getCabalReq :: PackageName -> IO (Request m)
 getCabalReq name =
     parseUrl $ "http://hackage.haskell.org/package/" ++ name' ++ "/" ++ name' ++ ".cabal"
     where name' = T.unpack name
 
-getCabal :: PackageName -> IO (Either String GenericPackageDescription)
+getCabal :: PackageName -> CabalBrewRun GenericPackageDescription
 getCabal name = do
-    man  <- newManager def
-    req  <- getCabalReq name
+    man  <- liftIO $ newManager def
+    req  <- liftIO $ getCabalReq name
     resp <-  parsePackageDescription . T.unpack . TE.decodeUtf8 . LBS.toStrict . responseBody
-         <$> runResourceT (browse man $ makeRequestLbs req)
-    return $ case resp of
-                 ParseOk _ a -> Right a
-                 ParseFailed e -> Left $ show e
+         <$> liftIO (runResourceT . browse man $ makeRequestLbs req)
+    liftET $ case resp of
+                 ParseOk _ a -> right a
+                 ParseFailed e -> left $ show e
 
 brew_ :: Text -> [Text] -> Sh ()
 brew_ = command1_ "brew" []
@@ -128,7 +169,7 @@ cabal_ :: Text -> [Text] -> Sh ()
 cabal_ = command1_ "cabal" []
 
 main :: IO ()
-main = execParser opts >>= shelly . verbosely . cabalBrew . mode
+main = execParser opts >>= void . runCabalBrew . cabalBrew . mode
     where opts' = Brew <$> subparser (  O.command "install" installOptions
                                      <> O.command "update"  updateOptions
                                      )
