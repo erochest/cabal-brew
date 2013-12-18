@@ -2,18 +2,6 @@
 {-# LANGUAGE RecordWildCards   #-}
 
 
--- TODO: Lookup version on install.
--- TODO: Use an `InstalledProject` data type.
--- TODO: Use `EitherT String Sh` more consistently.
--- TODO: Use `WriterT (EitherT String Sh)` for summary of what happened.
--- TODO: Consider a library other than `Shelly` for running shell commands. That would remove a dependency, and a fairly intrusive one, too.
--- TODO: `list` command.
--- TODO: Continue upgrading if one package fails.
--- TODO: Print summary of actions at the end.
--- TODO: `outdated` command.
--- TODO: Print all outdated packages before upgrading any.
-
-
 module Main where
 
 
@@ -89,17 +77,15 @@ getPackageDirectory :: PackageName -> FilePath
 getPackageDirectory = FS.append cellar . fromText . T.append "cabal-"
 
 update :: PackageName -> Sh ()
-update packageName = eitherError =<< (runEitherT $ do
+update packageName = eitherError =<< runEitherT (do
     v0 <-  EitherT $ note "Invalid or missing current package."
        <$> getCurrentVersion packageName
     v1 <- EitherT $ getHackageVersion packageName
-    if v0 < v1
-        then do
-            let v1' = showv v1
-            echo' $ ">>> Updating " <> packageName <> ": " <> (showv v0) <> " => " <> v1'
-            lift . cabalBrew $ Install packageName v1'
-            echo' ""
-        else return ())
+    when (v0 < v1) $ do
+        let v1' = showv v1
+        echo' $ ">>> Updating " <> packageName <> ": " <> showv v0 <> " => " <> v1'
+        lift . cabalBrew $ Install packageName v1'
+        echo' "")
     where showv = T.pack . showVersion
           lift  = EitherT . fmap Right
           echo' = lift . echo
@@ -130,7 +116,7 @@ getCabal name = do
     man  <- newManager def
     req  <- getCabalReq name
     resp <-  parsePackageDescription . T.unpack . TE.decodeUtf8 . LBS.toStrict . responseBody
-         <$> (runResourceT $ browse man $ makeRequestLbs req)
+         <$> runResourceT (browse man $ makeRequestLbs req)
     return $ case resp of
                  ParseOk _ a -> Right a
                  ParseFailed e -> Left $ show e
