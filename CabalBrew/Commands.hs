@@ -9,11 +9,13 @@ module CabalBrew.Commands
 
 
 import           Control.Monad
+import           Control.Monad.Writer.Class
+import qualified Data.DList                 as D
 import           Data.Monoid
-import qualified Data.Text                 as T
+import qualified Data.Text                  as T
 import           Data.Version
-import qualified Filesystem.Path.CurrentOS as FS
-import           Prelude                   hiding (FilePath)
+import qualified Filesystem.Path.CurrentOS  as FS
+import           Prelude                    hiding (FilePath)
 import           Shelly
 
 import           CabalBrew.Hackage
@@ -36,7 +38,7 @@ cabalBrew (Update []) = do
         [] -> liftSh $ echo "Nothing to update."
         ps -> cabalBrew (Update ps)
 cabalBrew Update{..} =
-    mapM_ update =<< filterM (liftSh . hasPackage)  packageNames
+    mapM_ update' =<< filterM (liftSh . hasPackage)  packageNames
 
 cabalBrew Ls =
     mapM_ (liftSh . echo . uncurry makePackageSpec') =<< list
@@ -46,12 +48,12 @@ install name version = do
     let keg     = T.toLower $ "cabal-" <> name
         sandbox = FS.concat [cellar, fromText keg, fromText version]
 
-    liftSh . whenM (test_d sandbox) $ do
+    liftSh' ("Error removing existing " <> T.unpack name)  . whenM (test_d sandbox) $ do
         echo $ "Cleaning out old keg for " <> keg
         brew_ "unlink" [keg]
         rm_rf . (cellar FS.</>) $ fromText keg
 
-    liftSh . chdir "/tmp" $ do
+    liftSh' ("Error installing " <> T.unpack name) . chdir "/tmp" $ do
         let packageSpec = makePackageSpec name version
         whenM (test_f "cabal.sandbox.config") $ rm "cabal.sandbox.config"
         echo $ "cabal " <> packageSpec <> " => " <> toTextIgnore sandbox
@@ -70,6 +72,14 @@ update pkgName = do
         echo' ""
     where showv = T.pack . showVersion
           echo' = liftSh . echo
+
+-- | This is just like update, except it catches errors and just logs them.
+update' :: PackageName -> CabalBrewRun ()
+update' pkgName = liftW . pass $ do
+    (out, logs) <- liftIO . runCabalBrew $ update pkgName
+    case out of
+        Left err -> return ((), (<> D.fromList logs <> D.singleton (T.pack err)))
+        Right _  -> return ((), (<> D.fromList logs))
 
 list :: CabalBrewRun [(PackageName, Version)]
 list =
