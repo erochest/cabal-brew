@@ -42,7 +42,7 @@ type PackageName    = Text
 type PackageVersion = Text
 
 data CabalBrew = Install { packageName    :: PackageName
-                         , packageVersion :: PackageVersion
+                         , packageVersion :: Maybe PackageVersion
                          }
                | Update  { packageNames :: [PackageName]
                          }
@@ -84,22 +84,24 @@ cellar :: FilePath
 cellar = FS.concat ["/usr", "local", "Cellar"]
 
 cabalBrew :: CabalBrew -> CabalBrewRun ()
-cabalBrew Install{..} = liftSh $ do
-    whenM (test_d sandbox) $ do
+cabalBrew Install{..} = do
+    version <- maybe (T.pack . showVersion <$> getHackageVersion packageName)
+                    return
+                    packageVersion
+    let keg     = "cabal-" <> packageName
+        sandbox = FS.concat [cellar, fromText keg, fromText version]
+
+    liftSh . whenM (test_d sandbox) $ do
         echo $ "Cleaning out old keg for " <> keg
         brew_ "unlink" [keg]
         rm_rf . (cellar FS.</>) $ fromText keg
-    chdir "/tmp" $ do
+
+    liftSh . chdir "/tmp" $ do
         whenM (test_f "cabal.sandbox.config") $ rm "cabal.sandbox.config"
-        echo $ "cabal " <> packageName <> "-" <> packageVersion <> " => " <> toTextIgnore sandbox
+        echo $ "cabal " <> packageName <> "-" <> version <> " => " <> toTextIgnore sandbox
         cabal_ "sandbox" ["init", "--sandbox=" <> toTextIgnore sandbox]
-        cabal_ "install" ["-j", packageName <> "-" <> packageVersion]
+        cabal_ "install" ["-j", packageName <> "-" <> version]
         brew_ "link" ["--overwrite", keg]
-    where keg     = "cabal-" <> packageName
-          sandbox = FS.concat [ cellar
-                              , fromText keg
-                              , fromText packageVersion
-                              ]
 
 cabalBrew (Update []) = do
     packages <-  map (T.drop 6)
@@ -125,7 +127,7 @@ update packageName = do
     when (v0 < v1) $ do
         let v1' = showv v1
         echo' $ ">>> Updating " <> packageName <> ": " <> showv v0 <> " => " <> v1'
-        cabalBrew $ Install packageName v1'
+        cabalBrew . Install packageName $ Just v1'
         echo' ""
     where showv = T.pack . showVersion
           echo' = liftSh . echo
@@ -186,8 +188,10 @@ installOptions = info (helper <*> opts)
                       <> header "cabal-brew install - install Haskell\
                                 \ packages programs.")
     where opts =   Install
-               <$> textArg (metavar "NAME"    <> help "The name of the package to install.")
-               <*> textArg (metavar "VERSION" <> help "The version to install.")
+               <$> textArg  (metavar "NAME"    <> help "The name of the package to install.")
+               <*> mtextArg (  metavar "VERSION" <> value Nothing
+                            <> help "The version to install."
+                            )
 
 updateOptions = info (helper <*> opts)
                      (  fullDesc
@@ -201,6 +205,9 @@ data BrewOpts = Brew { mode :: CabalBrew } deriving (Show)
 
 textArg :: Mod ArgumentFields Text -> Parser Text
 textArg = argument (Just . T.pack)
+
+mtextArg :: Mod ArgumentFields (Maybe Text) -> Parser (Maybe Text)
+mtextArg = argument (Just . Just . T.pack)
 
 textArgs :: Mod ArgumentFields Text -> Parser [Text]
 textArgs = arguments (Just . T.pack)
