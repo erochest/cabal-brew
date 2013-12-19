@@ -17,7 +17,14 @@ cabal-version:       >=1.10
 
 executable cabal-brew
   main-is:             CabalBrew.hs
-  -- other-modules:       
+  other-modules:       CabalBrew.Commands
+                     , CabalBrew.Hackage
+                     , CabalBrew.Log
+                     , CabalBrew.Options
+                     , CabalBrew.Packages
+                     , CabalBrew.Paths
+                     , CabalBrew.Shell
+                     , CabalBrew.Types
   -- other-extensions:    
   build-depends:       base >=4.6 && <4.7
                      , shelly
