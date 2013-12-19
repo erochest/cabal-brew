@@ -24,11 +24,26 @@ import           CabalBrew.Types
 
 
 cabalBrew :: CabalBrew -> CabalBrewRun ()
-cabalBrew Install{..} = do
-    version <- maybe (T.pack . showVersion <$> getHackageVersion packageName)
-                    return
-                    packageVersion
-    let keg     = T.toLower $ "cabal-" <> packageName
+cabalBrew Install{..} =
+    maybe (T.pack . showVersion <$> getHackageVersion packageName)
+          return
+          packageVersion >>=
+    install packageName
+
+cabalBrew (Update []) = do
+    packages <- map fst <$> list
+    case packages of
+        [] -> liftSh $ echo "Nothing to update."
+        ps -> cabalBrew (Update ps)
+cabalBrew Update{..} =
+    mapM_ update =<< filterM (liftSh . hasPackage)  packageNames
+
+cabalBrew Ls =
+    mapM_ (liftSh . echo . uncurry makePackageSpec') =<< list
+
+install :: PackageName -> PackageVersion -> CabalBrewRun ()
+install name version = do
+    let keg     = T.toLower $ "cabal-" <> name
         sandbox = FS.concat [cellar, fromText keg, fromText version]
 
     liftSh . whenM (test_d sandbox) $ do
@@ -37,31 +52,12 @@ cabalBrew Install{..} = do
         rm_rf . (cellar FS.</>) $ fromText keg
 
     liftSh . chdir "/tmp" $ do
-        let packageSpec = makePackageSpec packageName version
+        let packageSpec = makePackageSpec name version
         whenM (test_f "cabal.sandbox.config") $ rm "cabal.sandbox.config"
         echo $ "cabal " <> packageSpec <> " => " <> toTextIgnore sandbox
         cabal_ "sandbox" ["init", "--sandbox=" <> toTextIgnore sandbox]
         cabal_ "install" ["-j", packageSpec]
         brew_ "link" ["--overwrite", keg]
-
-cabalBrew (Update []) = do
-    packages <- map fst <$> listInstalled
-    case packages of
-        [] -> liftSh $ echo "Nothing to update."
-        ps -> cabalBrew (Update ps)
-cabalBrew Update{..} =
-    mapM_ update =<< filterM (liftSh . hasPackage)  packageNames
-
-cabalBrew Ls =
-    mapM_ (liftSh . echo . uncurry makePackageSpec') =<< listInstalled
-
-listInstalled :: CabalBrewRun [(PackageName, Version)]
-listInstalled =
-    filter (/= "install") . map (T.drop 6)
-                         . filter (T.isPrefixOf "cabal-")
-                         . map (toTextIgnore . FS.filename)
-          <$> liftSh (ls cellar) >>=
-    mapM (\n -> (n,) <$> getCurrentVersion n)
 
 update :: PackageName -> CabalBrewRun ()
 update pkgName = do
@@ -74,4 +70,12 @@ update pkgName = do
         echo' ""
     where showv = T.pack . showVersion
           echo' = liftSh . echo
+
+list :: CabalBrewRun [(PackageName, Version)]
+list =
+    filter (/= "install") . map (T.drop 6)
+                         . filter (T.isPrefixOf "cabal-")
+                         . map (toTextIgnore . FS.filename)
+          <$> liftSh (ls cellar) >>=
+    mapM (\n -> (n,) <$> getCurrentVersion n)
 
