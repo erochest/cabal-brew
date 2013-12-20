@@ -9,8 +9,6 @@ module CabalBrew.Commands
 
 
 import           Control.Monad
-import           Control.Monad.Writer.Class
-import qualified Data.DList                 as D
 import           Data.Monoid
 import qualified Data.Text                  as T
 import           Data.Version
@@ -84,11 +82,7 @@ update pkgName = do
 
 -- | This is just like update, except it catches errors and just logs them.
 update' :: PackageName -> CabalBrewRun ()
-update' pkgName = liftW . pass $ do
-    (out, logs) <- liftIO . runCabalBrew $ update pkgName
-    case out of
-        Left err -> return ((), (<> D.fromList logs <> D.singleton (T.pack err)))
-        Right _  -> return ((), (<> D.fromList logs))
+update' pkgName = void . safeCabalBrew Nothing $ update pkgName
 
 list :: CabalBrewRun [(PackageName, Version)]
 list =

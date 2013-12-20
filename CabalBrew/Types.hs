@@ -10,6 +10,8 @@ module CabalBrew.Types
     , runCabalBrew
     , execCabalBrew
     , logCabalBrew
+    , safeCabalBrew
+    , (?>)
     , liftSh
     , liftW
     , liftET
@@ -23,6 +25,7 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Writer.Strict
 import qualified Data.DList                  as D
 import           Data.Text                   (Text)
+import qualified Data.Text                   as T
 import           Shelly
 
 
@@ -57,6 +60,18 @@ logCabalBrew :: (Functor m, MonadIO m) => CabalBrewRun a -> m (Either String [Te
 logCabalBrew m = do
     (a, w) <- runCabalBrew m
     return $ w <$ a
+
+safeCabalBrew :: Maybe T.Text -> CabalBrewRun a -> CabalBrewRun (Maybe a)
+safeCabalBrew errMsg m = liftW . pass $ do
+    (out, logs) <- liftIO $ runCabalBrew m
+    case out of
+        Right v -> return (Just v, (`D.append` D.fromList logs))
+        Left e  -> let logs'   = D.fromList logs `D.snoc` T.pack e
+                       withErr = maybe logs' (`D.cons` logs') errMsg
+                   in  return (Nothing, (`D.append` withErr))
+
+(?>) :: CabalBrewRun a -> (a -> CabalBrewRun b) -> CabalBrewRun (Maybe b)
+m ?> n = maybe (return Nothing) (fmap Just . n) =<< safeCabalBrew Nothing m
 
 
 liftSh :: Sh a -> CabalBrewRun a

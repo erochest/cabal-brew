@@ -12,10 +12,8 @@ module CabalBrew.Hackage
 import           Control.Applicative
 import           Control.Error
 import           Control.Monad.IO.Class
-import           Control.Monad.Writer.Class
 import qualified Data.ByteString.Lazy                  as LBS
 import           Data.Conduit
-import qualified Data.DList                            as D
 import           Data.Monoid
 import qualified Data.Text                             as T
 import qualified Data.Text.Encoding                    as TE
@@ -38,14 +36,8 @@ getHackageVersion =
 
 -- | This is just like getHackageVersion, except it catches errors and just logs them.
 getHackageVersion' :: PackageName -> CabalBrewRun (Maybe Version)
-getHackageVersion' name = do
-    liftW . pass $ do
-        (out, logs) <- liftIO . runCabalBrew $ getHackageVersion name
-        case out of
-            Left e  -> return (Nothing, (<> D.singleton ("Error on Hackage: " <> name)
-                                         <> D.fromList logs
-                                         <> D.singleton (T.pack e)))
-            Right v -> return (Just v, (<> D.fromList logs))
+getHackageVersion' name =
+    safeCabalBrew (Just ("Error on Hackage: " <> name)) $ getHackageVersion name
 
 getCabalReq :: PackageName -> IO (Request m)
 getCabalReq name =
