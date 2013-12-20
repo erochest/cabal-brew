@@ -34,7 +34,7 @@ cabalBrew Install{..} =
     install packageName
 
 cabalBrew (Update []) = do
-    packages <- map fst <$> list
+    packages <- map fst <$> outdated
     case packages of
         [] -> log "Nothing to update."
         ps -> cabalBrew (Update ps)
@@ -43,8 +43,13 @@ cabalBrew Update{..} =
     where updateLog n = log ("Checking " <> n) >> update' n
 
 cabalBrew Ls =
-        log "Installed packages."
+        log "Installed packages:"
     >>  list
+    >>= mapM_ (log . uncurry makePackageSpec')
+
+cabalBrew Outdated =
+        log "Outdated packages:"
+    >>  outdated
     >>= mapM_ (log . uncurry makePackageSpec')
 
 install :: PackageName -> PackageVersion -> CabalBrewRun ()
@@ -92,4 +97,13 @@ list =
                          . map (toTextIgnore . FS.filename)
           <$> liftSh (ls cellar) >>=
     mapM (\n -> (n,) <$> getCurrentVersion n)
+
+outdated :: CabalBrewRun [(PackageName, Version)]
+outdated =
+        fmap (map fst . filter cmpv)
+    .   mapM decorate
+    =<< list
+    where decorate p = (p,) <$> getHackageVersion' (fst p)
+          cmpv ((_, v0), Just v1) = v0 < v1
+          cmpv _                  = False
 

@@ -25,9 +25,10 @@ import           CabalBrew.Types
 
 main :: IO ()
 main = execParser opts >>= runCabalBrew . cabalBrew . mode >>= outputLogs . snd
-    where opts' = Brew <$> subparser (  O.command "install" installOptions
-                                     <> O.command "update"  updateOptions
-                                     <> O.command "list"    listOptions
+    where opts' = Brew <$> subparser (  O.command "install"  installOptions
+                                     <> O.command "update"   updateOptions
+                                     <> O.command "list"     listOptions
+                                     <> O.command "outdated" outdatedOptions
                                      )
           opts  = info (helper <*> opts')
                        (  fullDesc
@@ -62,8 +63,17 @@ listOptions :: ParserInfo CabalBrew
 listOptions = info (helper <*> opts)
                    (  fullDesc
                    <> progDesc "This lists the Cabal packages that Homebrew manages."
-                   <> header "cabal-brew list - list cabal-installed, homebrew-managed programs.")
+                   <> header "cabal-brew list - list cabal-installed,\
+                             \ homebrew-managed programs.")
     where opts = pure Ls
+
+outdatedOptions :: ParserInfo CabalBrew
+outdatedOptions = info (helper <*> opts)
+                       (  fullDesc
+                       <> progDesc "This lists the Cabal packages that need updating."
+                       <> header "cabal-brew outddated - list outdated cabal-installed,\
+                                 \ homebrew-managed programs.")
+    where opts = pure Outdated
 
 data BrewOpts = Brew { mode :: CabalBrew } deriving (Show)
 

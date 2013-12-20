@@ -32,12 +32,13 @@ data Hole = Hole
 type PackageName    = Text
 type PackageVersion = Text
 
-data CabalBrew = Install { packageName    :: PackageName
-                         , packageVersion :: Maybe PackageVersion
-                         }
-               | Update  { packageNames :: [PackageName]
-                         }
+data CabalBrew = Install   { packageName    :: PackageName
+                           , packageVersion :: Maybe PackageVersion
+                           }
+               | Update    { packageNames :: [PackageName]
+                           }
                | Ls
+               | Outdated
                 deriving (Show)
 
 newtype CabalBrewRun a = CBR { runCBR :: EitherT String (WriterT (D.DList Text) Sh) a }
