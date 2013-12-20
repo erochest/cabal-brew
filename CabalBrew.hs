@@ -32,6 +32,7 @@ main =   execParser opts
                                      <> O.command "update"   updateOptions
                                      <> O.command "list"     listOptions
                                      <> O.command "outdated" outdatedOptions
+                                     <> O.command "remove"   removeOptions
                                      )
           opts  = info (helper <*> opts')
                        (  fullDesc
@@ -80,6 +81,14 @@ outdatedOptions = info (helper <*> opts)
                        <> header "cabal-brew outddated - list outdated cabal-installed,\
                                  \ homebrew-managed programs.")
     where opts = pure Outdated
+
+removeOptions :: ParserInfo CabalBrew
+removeOptions = info (helper <*> opts)
+                     (  fullDesc
+                     <> progDesc "This unlinks and deletes a Cabal package."
+                     <> header "cabal-brew remove - remove an installed package.")
+    where opts =   Remove
+               <$> pnameArg (metavar "PACKAGE" <> help "The name of the package to uninstall.")
 
 data BrewOpts = Brew { mode :: CabalBrew } deriving (Show)
 

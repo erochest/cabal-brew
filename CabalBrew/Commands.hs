@@ -51,6 +51,9 @@ cabalBrew Outdated = do
     >>  outdated
     >>= mapM_ (log . formatUpgrade)
 
+cabalBrew Remove{..} = logName packageName >> remove packageName
+    where logName (PackageName n) = log $ "Removing " <> T.pack n
+
 -- Slightly more abstract functions. These are the work horses.
 
 install :: PackageName -> Version -> CabalBrewRun ()
@@ -58,12 +61,7 @@ install name@(PackageName nameStr) version = do
     let keg     = T.toLower $ "cabal-" <> T.pack nameStr
         sandbox = FS.concat [cellar, fromText keg, fromText . T.pack $ showVersion version]
 
-    isDir <- liftSh $ test_d sandbox
-    when isDir $ do
-        log $ "Deleting keg " <> keg
-        liftSh' ("Error removing existing " <> nameStr) $ do
-            brew_ "unlink" [keg]
-            rm_rf . (cellar FS.</>) $ fromText keg
+    remove name
 
     let packageSpec = makePackageSpec name $ showVersion version
     log $ "cabal " <> packageSpec <> " => " <> toTextIgnore sandbox
@@ -118,6 +116,18 @@ outdated =
           cmpv _                = False
           foldm (n, v0, Just v1) = Just (n, v0, v1)
           foldm (_, _,  Nothing) = Nothing
+
+remove :: PackageName -> CabalBrewRun ()
+remove (PackageName nameStr) = do
+    let keg     = T.toLower $ "cabal-" <> T.pack nameStr
+        sandbox = cellar FS.</> fromText keg
+
+    isDir <- liftSh $ test_d sandbox
+    when isDir $ do
+        log $ "Deleting keg " <> keg
+        liftSh' ("Error removing existing " <> nameStr) $ do
+            brew_ "unlink" [keg]
+            rm_rf sandbox
 
 -- Utilities
 

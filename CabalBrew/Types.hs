@@ -45,6 +45,8 @@ data CabalBrew = Install   { packageName    :: PackageName
                            }
                | Ls
                | Outdated
+               | Remove    { packageName :: PackageName
+                           }
                 deriving (Show)
 
 newtype CabalBrewRun a = CBR { runCBR :: EitherT String (WriterT (D.DList Text) Sh) a }
