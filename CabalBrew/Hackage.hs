@@ -42,7 +42,6 @@ getCabal :: PackageName -> CabalBrewRun GenericPackageDescription
 getCabal name = do
     man  <- liftIO $ newManager def
     req  <- liftIO $ getCabalReq name
-    liftSh . echo $ "Downloading cabal file for " `T.append` name
     resp <-  parsePackageDescription . T.unpack . TE.decodeUtf8 . LBS.toStrict . responseBody
          <$> liftIO' (runResourceT . browse man $ makeRequestLbs req)
     liftET $ case resp of

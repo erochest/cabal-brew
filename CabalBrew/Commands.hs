@@ -15,10 +15,11 @@ import           Data.Monoid
 import qualified Data.Text                  as T
 import           Data.Version
 import qualified Filesystem.Path.CurrentOS  as FS
-import           Prelude                    hiding (FilePath)
+import           Prelude                    hiding (FilePath, log)
 import           Shelly
 
 import           CabalBrew.Hackage
+import           CabalBrew.Log
 import           CabalBrew.Packages
 import           CabalBrew.Paths
 import           CabalBrew.Shell
@@ -35,28 +36,33 @@ cabalBrew Install{..} =
 cabalBrew (Update []) = do
     packages <- map fst <$> list
     case packages of
-        [] -> liftSh $ echo "Nothing to update."
+        [] -> log "Nothing to update."
         ps -> cabalBrew (Update ps)
 cabalBrew Update{..} =
-    mapM_ update' =<< filterM (liftSh . hasPackage)  packageNames
+    mapM_ updateLog =<< filterM (liftSh . hasPackage)  packageNames
+    where updateLog n = log ("Checking " <> n) >> update' n
 
 cabalBrew Ls =
-    mapM_ (liftSh . echo . uncurry makePackageSpec') =<< list
+        log "Installed packages."
+    >>  list
+    >>= mapM_ (log . uncurry makePackageSpec')
 
 install :: PackageName -> PackageVersion -> CabalBrewRun ()
 install name version = do
     let keg     = T.toLower $ "cabal-" <> name
         sandbox = FS.concat [cellar, fromText keg, fromText version]
 
-    liftSh' ("Error removing existing " <> T.unpack name)  . whenM (test_d sandbox) $ do
-        echo $ "Cleaning out old keg for " <> keg
-        brew_ "unlink" [keg]
-        rm_rf . (cellar FS.</>) $ fromText keg
+    isDir <- liftSh $ test_d sandbox
+    when isDir $ do
+        log $ "Deleting keg " <> keg
+        liftSh' ("Error removing existing " <> T.unpack name) $ do
+            brew_ "unlink" [keg]
+            rm_rf . (cellar FS.</>) $ fromText keg
 
+    let packageSpec = makePackageSpec name version
+    log $ "cabal " <> packageSpec <> " => " <> toTextIgnore sandbox
     liftSh' ("Error installing " <> T.unpack name) . chdir "/tmp" $ do
-        let packageSpec = makePackageSpec name version
         whenM (test_f "cabal.sandbox.config") $ rm "cabal.sandbox.config"
-        echo $ "cabal " <> packageSpec <> " => " <> toTextIgnore sandbox
         cabal_ "sandbox" ["init", "--sandbox=" <> toTextIgnore sandbox]
         cabal_ "install" ["-j", packageSpec]
         brew_ "link" ["--overwrite", keg]
@@ -67,11 +73,9 @@ update pkgName = do
     v1 <- getHackageVersion pkgName
     when (v0 < v1) $ do
         let v1' = showv v1
-        echo' $ ">>> Updating " <> pkgName <> ": " <> showv v0 <> " => " <> v1'
+        log $ "Updating " <> pkgName <> ": " <> showv v0 <> " => " <> v1'
         cabalBrew . Install pkgName $ Just v1'
-        echo' ""
     where showv = T.pack . showVersion
-          echo' = liftSh . echo
 
 -- | This is just like update, except it catches errors and just logs them.
 update' :: PackageName -> CabalBrewRun ()

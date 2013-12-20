@@ -10,6 +10,7 @@ module CabalBrew.Log
 import           Control.Monad.Writer.Strict
 import qualified Data.DList                  as D
 import           Data.Text                   (Text)
+import           Prelude                     hiding (log)
 
 import           CabalBrew.Types
 
