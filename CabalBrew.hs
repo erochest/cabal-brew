@@ -10,6 +10,7 @@
 module Main where
 
 
+import           Control.Arrow
 import           Control.Monad.Writer.Strict
 import           Data.Functor
 import           Data.Maybe
@@ -24,7 +25,9 @@ import           CabalBrew.Types
 
 
 main :: IO ()
-main = execParser opts >>= runCabalBrew . cabalBrew . mode >>= outputLogs . snd
+main =   execParser opts
+     >>= runCabalBrew . cabalBrew . mode
+     >>= void . liftPair . (outputErr *** outputLogs)
     where opts' = Brew <$> subparser (  O.command "install"  installOptions
                                      <> O.command "update"   updateOptions
                                      <> O.command "list"     listOptions
@@ -36,6 +39,9 @@ main = execParser opts >>= runCabalBrew . cabalBrew . mode >>= outputLogs . snd
                                    \ to be managed by Homebrew."
                        )
           outputLogs = mapM_ TIO.putStrLn
+          outputErr (Right _)  = return ()
+          outputErr (Left err) = putStrLn err
+          liftPair (a, b) = (,) <$> a <*> b
 
 installOptions :: ParserInfo CabalBrew
 installOptions = info (helper <*> opts)
