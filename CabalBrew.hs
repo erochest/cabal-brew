@@ -13,9 +13,10 @@ module Main where
 import           Control.Monad.Writer.Strict
 import           Data.Functor
 import           Data.Maybe
+import qualified Data.Text.IO                as TIO
 import           Options.Applicative
 import qualified Options.Applicative         as O
-import           Prelude                     hiding (FilePath, log)
+import           Prelude                     hiding (FilePath)
 
 import           CabalBrew.Commands
 import           CabalBrew.Options
@@ -23,7 +24,7 @@ import           CabalBrew.Types
 
 
 main :: IO ()
-main = execParser opts >>= void . runCabalBrew . cabalBrew . mode
+main = execParser opts >>= runCabalBrew . cabalBrew . mode >>= outputLogs . snd
     where opts' = Brew <$> subparser (  O.command "install" installOptions
                                      <> O.command "update"  updateOptions
                                      <> O.command "list"    listOptions
@@ -33,6 +34,7 @@ main = execParser opts >>= void . runCabalBrew . cabalBrew . mode
                        <> progDesc "Manages Haskell executable packages\
                                    \ to be managed by Homebrew."
                        )
+          outputLogs = mapM_ TIO.putStrLn
 
 installOptions :: ParserInfo CabalBrew
 installOptions = info (helper <*> opts)
