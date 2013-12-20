@@ -18,9 +18,7 @@ import           Data.Monoid
 import qualified Data.Text                             as T
 import qualified Data.Text.Encoding                    as TE
 import           Data.Version
-import           Distribution.Package                  hiding (PackageName,
-                                                        packageName,
-                                                        packageVersion)
+import           Distribution.Package
 import           Distribution.PackageDescription
 import           Distribution.PackageDescription.Parse
 import           Network.HTTP.Conduit
@@ -36,13 +34,13 @@ getHackageVersion =
 
 -- | This is just like getHackageVersion, except it catches errors and just logs them.
 getHackageVersion' :: PackageName -> CabalBrewRun (Maybe Version)
-getHackageVersion' name =
-    safeCabalBrew (Just ("Error on Hackage: " <> name)) $ getHackageVersion name
+getHackageVersion' pname@(PackageName name) =
+    safeCabalBrew (Just msg) $ getHackageVersion pname
+    where msg = "Error on Hackage: " <> T.pack name
 
 getCabalReq :: PackageName -> IO (Request m)
-getCabalReq name =
-    parseUrl $ "http://hackage.haskell.org/package/" ++ name' ++ "/" ++ name' ++ ".cabal"
-    where name' = T.unpack name
+getCabalReq (PackageName name) =
+    parseUrl $ "http://hackage.haskell.org/package/" ++ name ++ "/" ++ name ++ ".cabal"
 
 getCabal :: PackageName -> CabalBrewRun GenericPackageDescription
 getCabal name = do

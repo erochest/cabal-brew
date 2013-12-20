@@ -3,8 +3,10 @@
 
 
 module CabalBrew.Types
-    ( PackageName
-    , PackageVersion
+    ( PackageName(..)
+    , PackageVersionStr
+    , PackageIdentifier(..)
+    , Version(..)
     , CabalBrew(..)
     , CabalBrewRun
     , runCabalBrew
@@ -26,17 +28,18 @@ import           Control.Monad.Writer.Strict
 import qualified Data.DList                  as D
 import           Data.Text                   (Text)
 import qualified Data.Text                   as T
+import           Data.Version
+import           Distribution.Package
 import           Shelly
 
 
 -- This is for debugging/development only.
 data Hole = Hole
 
-type PackageName    = Text
-type PackageVersion = Text
+type PackageVersionStr = String
 
 data CabalBrew = Install   { packageName    :: PackageName
-                           , packageVersion :: Maybe PackageVersion
+                           , packageVersion :: Maybe Version
                            }
                | Update    { packageNames :: [PackageName]
                            }

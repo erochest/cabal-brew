@@ -45,8 +45,8 @@ installOptions = info (helper <*> opts)
                       <> header "cabal-brew install - install Haskell\
                                 \ packages programs.")
     where opts =   Install
-               <$> textArg  (metavar "NAME"    <> help "The name of the package to install.")
-               <*> mtextArg (  metavar "VERSION" <> value Nothing
+               <$> pnameArg (metavar "NAME"    <> help "The name of the package to install.")
+               <*> mverArg  (  metavar "VERSION" <> value Nothing
                             <> help "The version to install."
                             )
 
@@ -57,7 +57,7 @@ updateOptions = info (helper <*> opts)
                                  \ managed by Homebrew."
                      <> header "cabal-brew update - update installed Haskell programs.")
     where opts =   Update
-               <$> textArgs (metavar "PACKAGES" <> help "The name of the packages to install.")
+               <$> pnameArgs (metavar "PACKAGES" <> help "The name of the packages to install.")
 
 listOptions :: ParserInfo CabalBrew
 listOptions = info (helper <*> opts)

@@ -16,9 +16,9 @@ import           Control.Error
 import           Control.Monad
 import           Data.Maybe
 import           Data.Monoid
-import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import           Data.Version
+import           Distribution.Text
 import qualified Filesystem.Path.CurrentOS    as FS
 import           Prelude                      hiding (FilePath)
 import           Shelly
@@ -28,17 +28,17 @@ import           CabalBrew.Paths
 import           CabalBrew.Types
 
 
-makePackageSpec :: PackageName -> PackageVersion -> Text
-makePackageSpec n v = n <> "-" <> v
+makePackageSpec :: PackageName -> PackageVersionStr -> T.Text
+makePackageSpec n v = T.pack (display n) <> "-" <> T.pack v
 
-makePackageSpec' :: PackageName -> Version -> Text
-makePackageSpec' n = makePackageSpec n . T.pack . showVersion
+makePackageSpec' :: PackageName -> Version -> T.Text
+makePackageSpec' n = makePackageSpec n . showVersion
 
 hasPackage :: PackageName -> Sh Bool
 hasPackage = test_d . getPackageDirectory
 
 getPackageDirectory :: PackageName -> FilePath
-getPackageDirectory = FS.append cellar . fromText . T.append "cabal-"
+getPackageDirectory = FS.append cellar . FS.decodeString . ("cabal-" ++) . display
 
 getCurrentVersion :: PackageName -> CabalBrewRun Version
 getCurrentVersion =
