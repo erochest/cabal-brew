@@ -30,15 +30,15 @@ import           CabalBrew.Types
 
 cabalBrew :: CabalBrew -> CabalBrewRun ()
 cabalBrew Install{..} =
-        install packageName
+        install . cabalPackageInfo packageName
     =<< maybe (getHackageVersion packageName) return packageVersion
 
 cabalBrew (Update []) = do
     packages <- outdated
     case packages of
         [] -> log "Nothing to update."
-        ps -> forM_ ps $ \pkg@(n, v0, v1) ->
-                log (formatUpgrade pkg) >> update' n v0 v1
+        ps -> forM_ ps $ \(cbp, v) ->
+                log (formatUpgrade cbp v) >> update' cbp v
 cabalBrew Update{..} =
     mapM_ updateLog =<< filterM (liftSh . hasPackage) packageNames
     where updateLog n@(PackageName nstr) =
@@ -49,73 +49,76 @@ cabalBrew Ls = list >>= printPackages "Installed packages:"
 cabalBrew Outdated = do
         log "Outdated packages:"
     >>  outdated
-    >>= mapM_ (log . formatUpgrade)
+    >>= mapM_ (log . uncurry formatUpgrade)
 
 cabalBrew Remove{..} = logName packageName >> remove packageName
     where logName (PackageName n) = log $ "Removing " <> T.pack n
 
 -- Slightly more abstract functions. These are the work horses.
 
-install :: PackageName -> Version -> CabalBrewRun ()
-install name@(PackageName nameStr) version = do
-    let keg     = T.toLower $ "cabal-" <> T.pack nameStr
-        sandbox = FS.concat [cellar, fromText keg, fromText . T.pack $ showVersion version]
+install :: CabalBrewPackage -> CabalBrewRun ()
+install cbp@CBP{..} = do
+    let name@(PackageName nameStr) = cbPackageName
+        keg = T.toLower $ "cabal-" <> T.pack nameStr
+        versionStr = showVersion cbPackageVersion
+        sandbox = cbPackageDirectory FS.</> fromText (T.pack versionStr)
 
     remove name
 
-    let packageSpec = makePackageSpec name $ showVersion version
+    let packageSpec = makePackageSpec name versionStr
     log $ "cabal " <> packageSpec <> " => " <> toTextIgnore sandbox
     liftSh' ("Error installing " <> nameStr) . chdir "/tmp" $ do
         whenM (test_f "cabal.sandbox.config") $ rm "cabal.sandbox.config"
         cabal_ "sandbox" ["init", "--sandbox=" <> toTextIgnore sandbox]
         cabal_ "install" ["-j", packageSpec]
         brew_ "link" ["--overwrite", keg]
+    writePackageInfo cbp
 
 updateName :: PackageName -> CabalBrewRun ()
 updateName pkgName = do
-    v0 <- getCurrentVersion pkgName
-    v1 <- getHackageVersion pkgName
-    update pkgName v0 v1
+    cbp <- readPackageInfo pkgName
+    v1  <- getHackageVersion pkgName
+    update cbp v1
 
 -- | This is just like update, except it catches errors and just logs them.
 updateName' :: PackageName -> CabalBrewRun ()
 updateName' pkgName = void . safeCabalBrew Nothing $ updateName pkgName
 
-update :: PackageName -> Version -> Version -> CabalBrewRun ()
-update pkgName@(PackageName nameStr) fromv tov
-    | fromv < tov =
+update :: CabalBrewPackage -> Version -> CabalBrewRun ()
+update CBP{..} tov
+    | cbPackageVersion < tov =
         let showv = T.pack . showVersion
-        in  log (  "Updating " <> T.pack nameStr <> ": " <> showv fromv
+            pkgName@(PackageName nameStr) = cbPackageName
+        in  log (  "Updating " <> T.pack nameStr <> ": " <> showv cbPackageVersion
                 <> " => " <> showv tov
                 )
             >> cabalBrew (Install pkgName $ Just tov)
     | otherwise = return ()
 
-update' :: PackageName -> Version -> Version -> CabalBrewRun ()
-update' pkgName fromv tov =
-    void . safeCabalBrew Nothing $ update pkgName fromv tov
+update' :: CabalBrewPackage -> Version -> CabalBrewRun ()
+update' cbp tov =
+    void . safeCabalBrew Nothing $ update cbp tov
 
-list :: CabalBrewRun [(PackageName, Version)]
+list :: CabalBrewRun [CabalBrewPackage]
 list =
     map PackageName . filter (/= "install")
                     . map (drop 6)
                     . filter (L.isPrefixOf "cabal-")
                     . map (FS.encodeString . FS.filename)
           <$> liftSh (ls cellar) >>=
-    mapM (\n -> (n,) <$> getCurrentVersion n)
+    mapM readPackageInfo
 
-outdated :: CabalBrewRun [(PackageName, Version, Version)]
+outdated :: CabalBrewRun [(CabalBrewPackage, Version)]
 outdated =
         fmap (mapMaybe foldm . filter cmpv)
     .   mapM decorate
     =<< list
-    where decorate (n, v) = do
-                v' <- getHackageVersion' n
-                return (n, v, v')
-          cmpv (_, v0, Just v1) = v0 < v1
-          cmpv _                = False
-          foldm (n, v0, Just v1) = Just (n, v0, v1)
-          foldm (_, _,  Nothing) = Nothing
+    where decorate cbp =
+                fmap (cbp,) <$> getHackageVersion' $ cbPackageName cbp
+          cmpv (CBP{..}, Just v1) = cbPackageVersion < v1
+          cmpv _                 = False
+          foldm (cbp, Just v) = Just (cbp, v)
+          foldm (_,  Nothing) = Nothing
 
 remove :: PackageName -> CabalBrewRun ()
 remove (PackageName nameStr) = do
@@ -131,12 +134,12 @@ remove (PackageName nameStr) = do
 
 -- Utilities
 
-printPackages :: T.Text -> [(PackageName, Version)] -> CabalBrewRun ()
+printPackages :: T.Text -> [CabalBrewPackage] -> CabalBrewRun ()
 printPackages msg packages = do
     log msg
-    mapM_ (log . uncurry makePackageSpec') packages
+    mapM_ (log . showBrewPackage) packages
 
-formatUpgrade :: (PackageName, Version, Version) -> T.Text
-formatUpgrade (n, v0, v1) =
-    makePackageSpec' n v0 <> " => " <> T.pack (showVersion v1)
+formatUpgrade :: CabalBrewPackage -> Version -> T.Text
+formatUpgrade cbp v1 =
+    showBrewPackage cbp <> " => " <> T.pack (showVersion v1)
 
