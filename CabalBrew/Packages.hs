@@ -70,7 +70,8 @@ readPackageInfo name = do
 
 getCurrentVersion :: PackageName -> CabalBrewRun Version
 getCurrentVersion =
-        maybeErr . join . fmap (readVersion . FS.encodeString . FS.filename) . listToMaybe
+        maybeErr . join . fmap (readVersion . FS.encodeString . FS.filename)
+      . listToMaybe
     <=< liftSh . ls . getPackageDirectory
     where maybeErr = liftET . hoistEither . note "Invalid package version."
 

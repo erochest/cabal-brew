@@ -20,7 +20,6 @@ module CabalBrew.Types
     , liftSh
     , liftW
     , liftET
-    , Hole
     ) where
 
 
@@ -37,9 +36,6 @@ import           Distribution.Package
 import qualified Filesystem.Path.CurrentOS   as FS
 import           Shelly
 
-
--- This is for debugging/development only.
-data Hole = Hole
 
 type PackageVersionStr = String
 
@@ -88,19 +84,23 @@ instance FromJSON CabalBrewPackage where
 
     parseJSON _            = mzero
 
-newtype CabalBrewRun a = CBR { runCBR :: EitherT String (WriterT (D.DList Text) Sh) a }
-                       deriving (Monad, Applicative, Functor)
+newtype CabalBrewRun a
+    = CBR { runCBR :: EitherT String (WriterT (D.DList Text) Sh) a }
+    deriving (Monad, Applicative, Functor)
 
 instance MonadIO CabalBrewRun where
     liftIO = liftSh . Shelly.liftIO
 
-runCabalBrew :: (Functor m, MonadIO m) => CabalBrewRun a -> m (Either String a, [Text])
-runCabalBrew = fmap (fmap D.toList) . shelly . verbosely . runWriterT . runEitherT . runCBR
+runCabalBrew :: (Functor m, MonadIO m)
+             => CabalBrewRun a -> m (Either String a, [Text])
+runCabalBrew = fmap (fmap D.toList) . shelly . verbosely
+             . runWriterT . runEitherT . runCBR
 
 execCabalBrew :: (Functor m, MonadIO m) => CabalBrewRun a -> m (Either String a)
 execCabalBrew = fmap fst . runCabalBrew
 
-logCabalBrew :: (Functor m, MonadIO m) => CabalBrewRun a -> m (Either String [Text])
+logCabalBrew :: (Functor m, MonadIO m)
+              => CabalBrewRun a -> m (Either String [Text])
 logCabalBrew m = do
     (a, w) <- runCabalBrew m
     return $ w <$ a

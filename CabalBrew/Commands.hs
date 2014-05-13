@@ -8,6 +8,7 @@ module CabalBrew.Commands
     ) where
 
 
+import           Control.Applicative
 import           Control.Monad
 import qualified Data.List                 as L
 import           Data.Maybe
@@ -75,10 +76,8 @@ install cbp@CBP{..} = do
     writePackageInfo cbp
 
 updateName :: PackageName -> CabalBrewRun ()
-updateName pkgName = do
-    cbp <- readPackageInfo pkgName
-    v1  <- getHackageVersion pkgName
-    update cbp v1
+updateName pkgName =
+    join $ update <$> readPackageInfo pkgName <*> getHackageVersion pkgName
 
 -- | This is just like update, except it catches errors and just logs them.
 updateName' :: PackageName -> CabalBrewRun ()
@@ -89,7 +88,8 @@ update CBP{..} tov
     | cbPackageVersion < tov =
         let showv = T.pack . showVersion
             pkgName@(PackageName nameStr) = cbPackageName
-        in  log (  "Updating " <> T.pack nameStr <> ": " <> showv cbPackageVersion
+        in  log (  "Updating " <> T.pack nameStr
+                               <> ": " <> showv cbPackageVersion
                 <> " => " <> showv tov
                 )
             >> cabalBrew (Install pkgName $ Just tov)

@@ -40,13 +40,15 @@ getHackageVersion' pname@(PackageName name) =
 
 getCabalReq :: PackageName -> IO (Request m)
 getCabalReq (PackageName name) =
-    parseUrl $ "http://hackage.haskell.org/package/" ++ name ++ "/" ++ name ++ ".cabal"
+    parseUrl $  "http://hackage.haskell.org/package/" ++ name
+             ++ "/" ++ name ++ ".cabal"
 
 getCabal :: PackageName -> CabalBrewRun GenericPackageDescription
 getCabal name = do
     man  <- liftIO $ newManager def
     req  <- liftIO $ getCabalReq name
-    resp <-  parsePackageDescription . T.unpack . TE.decodeUtf8 . LBS.toStrict . responseBody
+    resp <-  parsePackageDescription . T.unpack . TE.decodeUtf8
+         .   LBS.toStrict . responseBody
          <$> liftIO' (runResourceT . browse man $ makeRequestLbs req)
     liftET $ case resp of
                  ParseOk _ a -> right a
