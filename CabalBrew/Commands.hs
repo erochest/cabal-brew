@@ -37,13 +37,13 @@ cabalBrew Install{..} =
 cabalBrew (Update []) = do
     packages <- outdated
     case packages of
-        [] -> log "Nothing to update."
+        [] -> logError "Nothing to update."
         ps -> forM_ ps $ \(cbp, v) ->
                 log (formatUpgrade cbp v) >> update' cbp v
 cabalBrew Update{..} =
     mapM_ updateLog =<< filterM (liftSh . hasPackage) packageNames
     where updateLog n@(PackageName nstr) =
-                log ("Checking " <> T.pack nstr) >> updateName' n
+                logSuccess ("Checking " <> T.pack nstr) >> updateName' n
 
 cabalBrew Ls = list >>= printPackages "Installed packages:"
 
@@ -53,7 +53,7 @@ cabalBrew Outdated = do
     >>= mapM_ (log . uncurry formatUpgrade)
 
 cabalBrew Remove{..} = logName packageName >> remove packageName
-    where logName (PackageName n) = log $ "Removing " <> T.pack n
+    where logName (PackageName n) = logError $ "Removing " <> T.pack n
 
 -- Slightly more abstract functions. These are the work horses.
 
@@ -127,7 +127,7 @@ remove (PackageName nameStr) = do
 
     isDir <- liftSh $ test_d sandbox
     when isDir $ do
-        log $ "Deleting keg " <> keg
+        logError $ "Deleting keg " <> keg
         liftSh' ("Error removing existing " <> nameStr) $ do
             brew_ "unlink" [keg]
             rm_rf sandbox
