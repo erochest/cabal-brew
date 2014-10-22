@@ -18,46 +18,62 @@ module CabalBrew.Options
 
 
 import           Control.Applicative
-import           Data.Monoid
 import           Data.Text            (Text)
 import qualified Data.Text            as T
 import           Distribution.Package
 import           Options.Applicative
+import           Options.Applicative.Types
 
 import           CabalBrew.Packages
 import           CabalBrew.Types
 
 
 textArg :: Mod ArgumentFields Text -> Parser Text
-textArg = argument (Just . T.pack)
+textArg = argument (reader T.pack)
 
 mtextArg :: Mod ArgumentFields (Maybe Text) -> Parser (Maybe Text)
-mtextArg = argument (Just . Just . T.pack)
+mtextArg = argument (reader (Just . T.pack))
 
 textArgs :: Mod ArgumentFields Text -> Parser [Text]
-textArgs = arguments (Just . T.pack)
+textArgs = arguments (reader T.pack)
 
 textOption :: Mod OptionFields Text -> Parser Text
-textOption fields = nullOption (reader (pure . T.pack) <> fields)
+textOption = option (reader T.pack)
 
 strArg :: Mod ArgumentFields String -> Parser String
-strArg = argument Just
+strArg = argument readerAsk
 
 mstrArg :: Mod ArgumentFields (Maybe String) -> Parser (Maybe String)
-mstrArg = argument (Just . Just)
+mstrArg = argument (reader Just)
 
 strArgs :: Mod ArgumentFields String -> Parser [String]
-strArgs = arguments Just
+strArgs = arguments readerAsk
 
 pnameArg :: Mod ArgumentFields PackageName -> Parser PackageName
-pnameArg = argument (Just . PackageName)
+pnameArg = argument (reader PackageName)
 
 pnameArgs :: Mod ArgumentFields PackageName -> Parser [PackageName]
-pnameArgs = arguments (Just . PackageName)
+pnameArgs = arguments (reader PackageName)
 
 verArg :: Mod ArgumentFields Version -> Parser Version
-verArg = argument readVersion
+verArg = argument parseVersion'
 
 mverArg :: Mod ArgumentFields (Maybe Version) -> Parser (Maybe Version)
-mverArg = argument (Just . readVersion)
+mverArg = argument parseVersion
+
+parseVersion :: ReadM (Maybe Version)
+parseVersion = fmap readVersion readerAsk
+
+parseVersion' :: ReadM Version
+parseVersion' = do
+    o <- readerAsk
+    case readVersion o of
+        Just v  -> return v
+        Nothing -> readerError ("Invalid version string: " ++ o)
+
+arguments :: ReadM a -> Mod ArgumentFields a -> Parser [a]
+arguments r = many . argument r
+
+reader :: (String -> a) -> ReadM a
+reader f = f <$> readerAsk
 
