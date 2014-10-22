@@ -11,9 +11,9 @@ module CabalBrew.Hackage
 
 import           Control.Applicative
 import           Control.Error
+import           Control.Lens
 import           Control.Monad.IO.Class
 import qualified Data.ByteString.Lazy                  as LBS
-import           Data.Conduit
 import           Data.Monoid
 import qualified Data.Text                             as T
 import qualified Data.Text.Encoding                    as TE
@@ -21,10 +21,8 @@ import           Data.Version
 import           Distribution.Package
 import           Distribution.PackageDescription
 import           Distribution.PackageDescription.Parse
-import           Network.HTTP.Conduit
-import           Network.HTTP.Conduit.Browser
+import           Network.Wreq
 
-import           CabalBrew.Shell
 import           CabalBrew.Types
 
 
@@ -38,19 +36,19 @@ getHackageVersion' pname@(PackageName name) =
     safeCabalBrew (Just msg) $ getHackageVersion pname
     where msg = "Error on Hackage: " <> T.pack name
 
-getCabalReq :: PackageName -> IO (Request m)
-getCabalReq (PackageName name) =
-    parseUrl $  "http://hackage.haskell.org/package/" ++ name
+getCabalUrl :: PackageName -> String
+getCabalUrl (PackageName name) =
+    "http://hackage.haskell.org/package/" ++ name
              ++ "/" ++ name ++ ".cabal"
 
 getCabal :: PackageName -> CabalBrewRun GenericPackageDescription
 getCabal name = do
-    man  <- liftIO $ newManager def
-    req  <- liftIO $ getCabalReq name
-    resp <-  parsePackageDescription . T.unpack . TE.decodeUtf8
-         .   LBS.toStrict . responseBody
-         <$> liftIO' (runResourceT . browse man $ makeRequestLbs req)
-    liftET $ case resp of
-                 ParseOk _ a -> right a
+    body <-  parsePackageDescription
+         .   T.unpack
+         .   TE.decodeUtf8
+         .   LBS.toStrict
+         .   (^. responseBody)
+         <$> liftIO (get $ getCabalUrl name)
+    liftET $ case body of
+                 ParseOk _ a   -> right a
                  ParseFailed e -> left $ show e
-
