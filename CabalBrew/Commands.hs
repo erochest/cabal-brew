@@ -125,9 +125,7 @@ remove (PackageName nameStr) = do
     let keg     = T.toLower $ "cabal-" <> T.pack nameStr
         sandbox = cellar FS.</> fromText keg
 
-    isDir <- liftSh $ test_d sandbox
-    when isDir $ do
-        logError $ "Deleting keg " <> keg
+    whenM (liftSh $ test_d sandbox) $ do
         liftSh' ("Error removing existing " <> nameStr) $ do
             brew_ "unlink" [keg]
             rm_rf sandbox
