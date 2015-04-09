@@ -25,14 +25,14 @@ run:
 # dev:
 # start dev server or process. `vagrant up`, `yesod devel`, etc.
 #
-# install:
-# generate executable and put it into `/usr/local`
-#
 # deploy:
 # prep and push
 
+install: test
+	cabal install
+
 hlint:
-	hlint *.hs src specs
+	hlint *.hs CabalBrew specs
 
 clean:
 	cabal clean
