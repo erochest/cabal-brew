@@ -47,10 +47,9 @@ cabalBrew Update{..} =
 
 cabalBrew Ls = list >>= printPackages "Installed packages:"
 
-cabalBrew Outdated = do
-        log "Outdated packages:"
-    >>  outdated
-    >>= mapM_ (log . uncurry formatUpgrade)
+cabalBrew Outdated =   log "Outdated packages:"
+                   >>  outdated
+                   >>= mapM_ (log . uncurry formatUpgrade)
 
 cabalBrew Remove{..} = logName packageName >> remove packageName
     where logName (PackageName n) = logError $ "Removing " <> T.pack n
@@ -125,7 +124,7 @@ remove (PackageName nameStr) = do
     let keg     = T.toLower $ "cabal-" <> T.pack nameStr
         sandbox = cellar FS.</> fromText keg
 
-    whenM (liftSh $ test_d sandbox) $ do
+    whenM (liftSh $ test_d sandbox) $
         liftSh' ("Error removing existing " <> nameStr) $ do
             brew_ "unlink" [keg]
             rm_rf sandbox
