@@ -37,7 +37,7 @@ cabalBrew Install{..} =
 cabalBrew (Update []) = do
     packages <- outdated
     case packages of
-        [] -> logError "Nothing to update."
+        [] -> logError "Cabal-brew: Nothing to update."
         ps -> forM_ ps $ \(cbp, v) ->
                 log (formatUpgrade cbp v) >> update' cbp v
 cabalBrew Update{..} =
