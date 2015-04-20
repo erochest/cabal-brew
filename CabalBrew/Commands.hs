@@ -14,6 +14,7 @@ import qualified Data.List                 as L
 import           Data.Maybe
 import           Data.Monoid
 import qualified Data.Text                 as T
+import qualified Data.Text.IO              as TIO
 import           Data.Version
 import qualified Filesystem.Path.CurrentOS as FS
 import           Prelude                   hiding (FilePath, log)
@@ -38,8 +39,14 @@ cabalBrew (Update []) = do
     packages <- outdated
     case packages of
         [] -> logError "Cabal-brew: Nothing to update."
-        ps -> forM_ ps $ \(cbp, v) ->
+        ps -> do
+            let status = map (uncurry formatUpgrade) ps
+            forM_ ps $ \(cbp, v) ->
                 log (formatUpgrade cbp v) >> update' cbp v
+            liftIO $ do
+                TIO.putStrLn ""
+                mapM_ TIO.putStrLn status
+                TIO.putStrLn ""
 cabalBrew Update{..} =
     mapM_ updateLog =<< filterM (liftSh . hasPackage) packageNames
     where updateLog n@(PackageName nstr) =

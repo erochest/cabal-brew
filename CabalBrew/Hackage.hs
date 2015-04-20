@@ -9,7 +9,6 @@ module CabalBrew.Hackage
     ) where
 
 
-import           Control.Applicative
 import           Control.Error
 import           Control.Lens
 import           Control.Monad.IO.Class
