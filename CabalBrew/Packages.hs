@@ -50,9 +50,12 @@ hasPackage = test_d . getPackageDirectory
 getPackageDirectory :: PackageName -> FilePath
 getPackageDirectory = FS.append cellar . FS.decodeString . ("cabal-" ++) . display
 
-cabalPackageInfo :: PackageName -> Version -> CabalBrewPackage
-cabalPackageInfo name@(PackageName nameStr) version =
-    CBP name version . (cellar FS.</>) . FS.decodeString $ "cabal-" ++ nameStr
+cabalPackageInfo :: PackageName -> Version -> Maybe T.Text-> CabalBrewPackage
+cabalPackageInfo name@(PackageName nameStr) version flags =
+    (flip (CBP name version) flags)
+        . (cellar FS.</>)
+        . FS.decodeString
+        $ "cabal-" ++ nameStr
 
 writePackageInfo :: CabalBrewPackage -> CabalBrewRun ()
 writePackageInfo cbp =
@@ -64,7 +67,7 @@ readPackageInfo name = do
     exists <- liftSh $ test_f filename
     if exists
         then liftET . hoistEither . Data.Aeson.eitherDecode =<< liftIO (BS.readFile filename')
-        else cabalPackageInfo name <$> getCurrentVersion name
+        else cabalPackageInfo name <$> getCurrentVersion name <*> pure Nothing
     where filename  = getPackageDirectory name FS.</> "cabal-brew.json"
           filename' = FS.encodeString filename
 

@@ -32,7 +32,7 @@ import           CabalBrew.Types
 
 cabalBrew :: CabalBrew -> CabalBrewRun ()
 cabalBrew Install{..} =
-        (`install` installFlags) . cabalPackageInfo packageName
+        install . (flip (cabalPackageInfo packageName) installFlags)
     =<< maybe (getHackageVersion packageName) return packageVersion
 
 cabalBrew (Update []) = do
@@ -63,8 +63,8 @@ cabalBrew Remove{..} = logName packageName >> remove packageName
 
 -- Slightly more abstract functions. These are the work horses.
 
-install :: CabalBrewPackage -> Maybe T.Text -> CabalBrewRun ()
-install cbp@CBP{..} installFlags = do
+install :: CabalBrewPackage -> CabalBrewRun ()
+install cbp@CBP{..} = do
     let name@(PackageName nameStr) = cbPackageName
         keg = T.toLower $ "cabal-" <> T.pack nameStr
         versionStr = showVersion cbPackageVersion
@@ -75,7 +75,7 @@ install cbp@CBP{..} installFlags = do
     let packageSpec = makePackageSpec name versionStr
     log $ "cabal " <> packageSpec <> " => " <> toTextIgnore sandbox
     liftSh' ("Error installing " <> nameStr) . chdir "/tmp" $ do
-        let flags = maybe [] (T.splitOn " ") installFlags
+        let flags = maybe [] (T.splitOn " ") cbPackageFlags
         whenM (test_f "cabal.sandbox.config") $ rm "cabal.sandbox.config"
         cabal_ "sandbox" ["init", "--sandbox=" <> toTextIgnore sandbox]
         cabal_ "install" $ flags ++ ["-j", packageSpec]
@@ -99,7 +99,7 @@ update CBP{..} tov
                                <> ": " <> showv cbPackageVersion
                 <> " => " <> showv tov
                 )
-            >> cabalBrew (Install pkgName (Just tov) Nothing)
+            >> cabalBrew (Install pkgName (Just tov) cbPackageFlags)
     | otherwise = return ()
 
 update' :: CabalBrewPackage -> Version -> CabalBrewRun ()

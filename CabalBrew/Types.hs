@@ -54,6 +54,7 @@ data CabalBrewPackage = CBP
                       { cbPackageName      :: PackageName
                       , cbPackageVersion   :: Version
                       , cbPackageDirectory :: FS.FilePath
+                      , cbPackageFlags     :: Maybe T.Text
                       } deriving (Show)
 
 instance ToJSON Version where
@@ -67,6 +68,7 @@ instance ToJSON CabalBrewPackage where
                    [ "name"    .= pName
                    , "version" .= toJSON cbPackageVersion
                    , "path"    .= FS.encodeString cbPackageDirectory
+                   , "flags"   .= cbPackageFlags
                    ]
                    where (PackageName pName) = cbPackageName
 
@@ -81,6 +83,7 @@ instance FromJSON CabalBrewPackage where
                            <$> fmap PackageName (obj .: "name")
                            <*> obj .: "version"
                            <*> fmap FS.decodeString (obj .: "path")
+                           <*> obj .: "flags"
 
     parseJSON _            = mzero
 
