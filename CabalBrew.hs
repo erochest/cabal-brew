@@ -54,6 +54,9 @@ installOptions = info (helper <*> opts)
                <*> mverArg  (  metavar "VERSION" <> value Nothing
                             <> help "The version to install."
                             )
+               <*> optional (textOption (  metavar "CABAL_FLAGS"
+                                        <> short 'f' <> long "flags"
+                                        <> help "Any arguments to pass to cabal."))
 
 updateOptions :: ParserInfo CabalBrew
 updateOptions = info (helper <*> opts)

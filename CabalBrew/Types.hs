@@ -40,6 +40,7 @@ type PackageVersionStr = String
 
 data CabalBrew = Install   { packageName    :: PackageName
                            , packageVersion :: Maybe Version
+                           , installFlags   :: Maybe T.Text
                            }
                | Update    { packageNames :: [PackageName]
                            }
